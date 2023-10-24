@@ -64,12 +64,13 @@ public class UserTest {
         assertFalse(user.getBuyList().containsKey(commodity.getId()), "Should not have item in buy list");
     }
 
+    @Test
     void testRemoveItemFromBuyListWithMoreThanOneItem() throws CommodityIsNotInBuyList {
         Commodity commodity = new Commodity();
         user.addBuyItem(commodity);
         user.addBuyItem(commodity);
         user.removeItemFromBuyList(commodity);
-        assertTrue(1, user.getBuyList().get(commodity.getId()).intValue(), "Should have remained 1 item in buy list");
+        assertEquals(1, user.getBuyList().get(commodity.getId()).intValue(), "Should have remained 1 item in buy list");
     }
 
     @Test
