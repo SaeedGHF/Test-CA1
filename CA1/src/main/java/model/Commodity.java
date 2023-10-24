@@ -39,7 +39,6 @@ public class Commodity {
         for (Map.Entry<String, Integer> entry : this.userRate.entrySet()) {
             sum += entry.getValue();
         }
-
-        this.rating = ((this.initRate + sum) / (this.userRate.size() + 1));
+        this.rating = !this.userRate.isEmpty() ? ((this.initRate + sum) / this.userRate.size()) : 0;
     }
 }
