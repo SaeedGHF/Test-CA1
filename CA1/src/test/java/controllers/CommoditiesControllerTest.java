@@ -1,128 +1,233 @@
 package controllers;
 
-import exceptions.NotExistentCommodity;
-import exceptions.NotExistentUser;
+import application.BalootApplication;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import database.Database;
+import defines.Errors;
 import model.Comment;
 import model.Commodity;
-import model.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.MediaType;
+import org.springframework.test.context.junit.jupiter.SpringExtension;
+import org.springframework.test.web.servlet.MockMvc;
 import service.Baloot;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.mockito.Mockito.*;
-
-@ExtendWith(MockitoExtension.class)
+@AutoConfigureMockMvc
+@ExtendWith(SpringExtension.class)
+@SpringBootTest(classes = BalootApplication.class)
 class CommoditiesControllerTest {
 
-    private CommoditiesController controllerUnderTest;
+    private Baloot baloot;
 
-    @Mock
-    private Baloot mockBaloot;
+    private Database database;
+
+    @Autowired
+    private MockMvc mvc;
+
+    @Autowired
+    private ObjectMapper objectMapper;
+
+    public static final String EXIST_COMMODITY_ID = "1";
+    public static final String NOT_EXIST_COMMODITY_ID = "0";
+    public static final String EMPTY_LIST = "[]";
+    public static final String NULL = "";
+    public static final String VALID_RATE = "10";
+    public static final String INVALID_RATE = "x10";
+    public static final String EXIST_USERNAME = "ali";
+    public static final String NOT_EXIST_USERNAME = "saeed";
+    public static final String SAMPLE_COMMENT = "Such a wow!";
+    public static final String VALID_SEARCH_OPTION = "name";
+    public static final String INVALID_SEARCH_OPTION = "name2";
+    public static final String EXIST_SEARCH_VALUE = "Galaxy";
+    public static final String NOT_EXIST_SEARCH_VALUE = "Galaxy2";
 
     @BeforeEach
-    void setUp() {
-        MockitoAnnotations.initMocks(this);
-        controllerUnderTest = new CommoditiesController();
-        controllerUnderTest.setBaloot(mockBaloot);
+    public void setUp() {
+        baloot = Baloot.getInstance();
+        database = Database.getInstance();
     }
 
     @Test
-    void shouldReturnCommodities() {
-        ArrayList<Commodity> expectedCommodities = new ArrayList<>();
-        when(mockBaloot.getCommodities()).thenReturn(expectedCommodities);
-
-        ResponseEntity<ArrayList<Commodity>> result = controllerUnderTest.getCommodities();
-
-        assertSame(expectedCommodities, result.getBody());
-        assertEquals(HttpStatus.OK, result.getStatusCode());
+    public void getCommoditiesTest_noError() throws Exception {
+        mvc.perform(get("/commodities"))
+                .andDo(print())
+                .andExpect(status().isOk())
+                .andExpect(content().string(objectMapper.writeValueAsString(database.getCommodities())));
     }
 
     @Test
-    void shouldReturnCommodity() throws NotExistentCommodity {
-        String id = "1";
-        Commodity expectedCommodity = new Commodity();
-        when(mockBaloot.getCommodityById(id)).thenReturn(expectedCommodity);
-
-        ResponseEntity<Commodity> result = controllerUnderTest.getCommodity(id);
-
-        assertSame(expectedCommodity, result.getBody());
-        assertEquals(HttpStatus.OK, result.getStatusCode());
+    public void getCommodityTest_commodityFound() throws Exception {
+        Commodity expectedCommodity = null;
+        for (Commodity commodity : Database.getInstance().getCommodities())
+            if (Objects.equals(commodity.getId(), EXIST_COMMODITY_ID))
+                expectedCommodity = commodity;
+        mvc.perform(get("/commodities/" + EXIST_COMMODITY_ID))
+                .andDo(print())
+                .andExpect(status().isOk())
+                .andExpect(content().string(objectMapper.writeValueAsString(expectedCommodity)));
     }
 
     @Test
-    void shouldRateCommodity() throws NotExistentCommodity {
-        String id = "1";
-        Map<String, String> input = Map.of("rate", "5", "username", "user1");
-        Commodity mockCommodity = mock(Commodity.class);
-        when(mockBaloot.getCommodityById(id)).thenReturn(mockCommodity);
-
-        ResponseEntity<String> result = controllerUnderTest.rateCommodity(id, input);
-
-        assertEquals(HttpStatus.OK, result.getStatusCode());
-        verify(mockCommodity).addRate(input.get("username"), Integer.parseInt(input.get("rate")));
+    public void getCommodityTest_commodityNotFound() throws Exception {
+        mvc.perform(get("/commodities/" + NOT_EXIST_COMMODITY_ID))
+                .andDo(print())
+                .andExpect(status().isNotFound())
+                .andExpect(content().string(NULL));
     }
 
     @Test
-    void shouldAddCommodityComment() throws NotExistentUser {
-        String id = "1";
-        Map<String, String> input = Map.of("username", "user1", "comment", "Nice commodity!");
-        User mockUser = mock(User.class);
-        when(mockUser.getUsername()).thenReturn(input.get("username"));
-        when(mockUser.getEmail()).thenReturn("user1@example.com");
-        when(mockBaloot.getUserById(input.get("username"))).thenReturn(mockUser);
-
-        ResponseEntity<String> result = controllerUnderTest.addCommodityComment(id, input);
-
-        assertEquals(HttpStatus.OK, result.getStatusCode());
-        verify(mockBaloot).addComment(any(Comment.class));
+    public void getCommodityCommentTest_commentExists() throws Exception {
+        ArrayList<Comment> comments = new ArrayList<>();
+        for (Comment comment : Database.getInstance().getComments())
+            if (comment.getCommodityId() == Integer.parseInt(EXIST_COMMODITY_ID))
+                comments.add(comment);
+        mvc.perform(get("/commodities/" + EXIST_COMMODITY_ID + "/comment"))
+                .andDo(print())
+                .andExpect(status().isOk())
+                .andExpect(content().string(objectMapper.writeValueAsString(comments)));
     }
 
     @Test
-    void shouldGetCommodityComment() {
-        String id = "1";
-        ArrayList<Comment> expectedComments = new ArrayList<>();
-        when(mockBaloot.getCommentsForCommodity(Integer.parseInt(id))).thenReturn(expectedComments);
-
-        ResponseEntity<ArrayList<Comment>> result = controllerUnderTest.getCommodityComment(id);
-
-        assertSame(expectedComments, result.getBody());
-        assertEquals(HttpStatus.OK, result.getStatusCode());
+    public void getCommodityCommentTest_commentNotExists() throws Exception {
+        mvc.perform(get("/commodities/" + NOT_EXIST_COMMODITY_ID + "/comment"))
+                .andDo(print())
+                .andExpect(status().isOk())
+                .andExpect(content().string(EMPTY_LIST));
     }
 
     @Test
-    void shouldSearchCommodities() {
-        Map<String, String> input = Map.of("searchOption", "name", "searchValue", "commodity1");
-        ArrayList<Commodity> expectedCommodities = new ArrayList<>();
-        when(mockBaloot.filterCommoditiesByName(input.get("searchValue"))).thenReturn(expectedCommodities);
-
-        ResponseEntity<ArrayList<Commodity>> result = controllerUnderTest.searchCommodities(input);
-
-        assertSame(expectedCommodities, result.getBody());
-        assertEquals(HttpStatus.OK, result.getStatusCode());
+    public void getSuggestedCommoditiesTest_suggestionExists() throws Exception {
+        mvc.perform(get("/commodities/" + EXIST_COMMODITY_ID + "/suggested"))
+                .andDo(print())
+                .andExpect(status().isOk())
+                .andExpect(content().string(objectMapper.writeValueAsString(baloot.suggestSimilarCommodities(baloot.getCommodityById(EXIST_COMMODITY_ID)))));
     }
 
     @Test
-    void shouldGetSuggestedCommodities() throws NotExistentCommodity {
-        String id = "1";
-        Commodity mockCommodity = new Commodity();
-        ArrayList<Commodity> expectedCommodities = new ArrayList<>();
-        when(mockBaloot.getCommodityById(id)).thenReturn(mockCommodity);
-        when(mockBaloot.suggestSimilarCommodities(mockCommodity)).thenReturn(expectedCommodities);
+    public void getSuggestedCommoditiesTest_suggestionNotExists() throws Exception {
+        mvc.perform(get("/commodities/" + NOT_EXIST_COMMODITY_ID + "/suggested"))
+                .andDo(print())
+                .andExpect(status().isNotFound())
+                .andExpect(content().string(EMPTY_LIST));
+    }
 
-        ResponseEntity<ArrayList<Commodity>> result = controllerUnderTest.getSuggestedCommodities(id);
+    @Test
+    public void rateCommodityTest_noError() throws Exception {
+        Map<String, String> payload = new HashMap<>();
+        payload.put("rate", VALID_RATE);
+        payload.put("username", EXIST_USERNAME);
+        mvc.perform(post("/commodities/" + EXIST_COMMODITY_ID + "/rate")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(payload)))
+                .andDo(print())
+                .andExpect(status().isOk())
+                .andExpect(content().string("rate added successfully!"));
+    }
 
-        assertSame(expectedCommodities, result.getBody());
-        assertEquals(HttpStatus.OK, result.getStatusCode());
+    @Test
+    public void rateCommodityTest_notExistentCommodityException() throws Exception {
+        Map<String, String> payload = new HashMap<>();
+        payload.put("rate", VALID_RATE);
+        payload.put("username", EXIST_USERNAME);
+        mvc.perform(post("/commodities/" + NOT_EXIST_COMMODITY_ID + "/rate")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(payload)))
+                .andDo(print())
+                .andExpect(status().isNotFound())
+                .andExpect(content().string(Errors.NOT_EXISTENT_COMMODITY));
+    }
+
+    @Test
+    public void rateCommodityTest_numberFormatException() throws Exception {
+        Map<String, String> payload = new HashMap<>();
+        payload.put("rate", INVALID_RATE);
+        payload.put("username", EXIST_USERNAME);
+        mvc.perform(post("/commodities/" + EXIST_COMMODITY_ID + "/rate")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(payload)))
+                .andDo(print())
+                .andExpect(status().isBadRequest());
+    }
+
+
+    @Test
+    public void addCommodityCommentTest_noError() throws Exception {
+        Map<String, String> payload = new HashMap<>();
+        payload.put("username", EXIST_USERNAME);
+        payload.put("comment", SAMPLE_COMMENT);
+        mvc.perform(post("/commodities/" + EXIST_COMMODITY_ID + "/comment")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(payload)))
+                .andDo(print())
+                .andExpect(status().isOk())
+                .andExpect(content().string("comment added successfully!"));
+    }
+
+
+    @Test
+    public void addCommodityCommentTest_notExistentUserException() throws Exception {
+        Map<String, String> payload = new HashMap<>();
+        payload.put("username", NOT_EXIST_USERNAME);
+        payload.put("comment", SAMPLE_COMMENT);
+        mvc.perform(post("/commodities/" + EXIST_COMMODITY_ID + "/comment")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(payload)))
+                .andDo(print())
+                .andExpect(status().isNotFound())
+                .andExpect(content().string(Errors.NOT_EXISTENT_USER));
+    }
+
+    @Test
+    public void searchCommoditiesTest_noError() throws Exception {
+        Map<String, String> payload = new HashMap<>();
+        payload.put("searchOption", VALID_SEARCH_OPTION);
+        payload.put("searchValue", EXIST_SEARCH_VALUE);
+        mvc.perform(post("/commodities/search")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(payload)))
+                .andDo(print())
+                .andExpect(status().isOk())
+                .andExpect(content().string(objectMapper.writeValueAsString(baloot.filterCommoditiesByName(EXIST_SEARCH_VALUE))));
+    }
+
+    @Test
+    public void searchCommoditiesTest_noCommodityFound() throws Exception {
+        Map<String, String> payload = new HashMap<>();
+        payload.put("searchOption", VALID_SEARCH_OPTION);
+        payload.put("searchValue", NOT_EXIST_SEARCH_VALUE);
+        mvc.perform(post("/commodities/search")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(payload)))
+                .andDo(print())
+                .andExpect(status().isOk())
+                .andExpect(content().string(EMPTY_LIST));
+    }
+
+    @Test
+    public void searchCommoditiesTest_invalidSearchOption() throws Exception {
+        Map<String, String> payload = new HashMap<>();
+        payload.put("searchOption", INVALID_SEARCH_OPTION);
+        payload.put("searchValue", VALID_SEARCH_OPTION);
+        mvc.perform(post("/commodities/search")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(payload)))
+                .andDo(print())
+                .andExpect(status().isOk())
+                .andExpect(content().string(EMPTY_LIST));
     }
 }
